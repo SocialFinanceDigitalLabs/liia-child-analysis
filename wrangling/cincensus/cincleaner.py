@@ -8,22 +8,36 @@ from lxml import etree
 # Main cleaner function
 
 def cleanfiles(input_folder, output_folder, config):
-    cin_files = glob.glob(os.path.join(input_folder, "*.xml"))
-    for i, file in enumerate(cin_files):
-        filename = file.replace(input_folder + '\\', '')
-        # Upload files and set root
-        print('Cleaning file {} out of {}'.format(i+1, len(cin_files)))
-        tree = etree.parse(file)
-        root = tree.getroot()
-        NS = get_namespace(root)
-        children = root.find('Children', NS)
-        for child in children:
-            child = cleanchild(child, config)
-        tree.write(os.path.join(output_folder, "cleaned-{}".format(filename)))
-        # Reload and rewrite xml so that we get proper identation after changing elements
-        parser = etree.XMLParser(remove_blank_text=True)
-        tree = etree.parse(os.path.join(output_folder, "cleaned-{}".format(filename)), parser)
-        tree.write(os.path.join(output_folder, "cleaned-{}".format(filename)), pretty_print=True)
+    # Find CIN files for each borough
+    for borough in os.listdir(input_folder):
+        cin_files = glob.glob(os.path.join(input_folder, borough, "*.xml"))
+        print("Found {} XML files for {}".format(len(cin_files), borough))
+        
+        # Go through each CIN file
+        for i, file in enumerate(cin_files):
+            filename = file.replace(input_folder + '\\' + borough + '\\', '')
+            print("File {} out of {}".format(i+1, len(cin_files)))
+            
+            # Upload files and set root
+            print('Cleaning')
+            tree = etree.parse(file)
+            root = tree.getroot()
+            NS = get_namespace(root)
+            children = root.find('Children', NS)
+            for child in children:
+                child = cleanchild(child, config)
+           
+            # Save output in borough folder
+            borough_folder = os.path.join(output_folder, borough)
+            if not os.path.exists(borough_folder):
+                os.makedirs(borough_folder)
+            print('Re-writing')
+            tree.write(os.path.join(borough_folder, "cleaned_{}".format(filename)))
+
+            # Reload and rewrite xml so that we get proper identation after changing elements
+            parser = etree.XMLParser(remove_blank_text=True)
+            tree = etree.parse(os.path.join(borough_folder, "cleaned_{}".format(filename)), parser)
+            tree.write(os.path.join(borough_folder, "cleaned_{}".format(filename)), pretty_print=True)
     return 
 
 
