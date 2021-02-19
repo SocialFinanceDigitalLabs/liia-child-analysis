@@ -38,6 +38,9 @@ def cleanfiles(input_folder, output_folder, config):
             parser = etree.XMLParser(remove_blank_text=True)
             tree = etree.parse(os.path.join(borough_folder, "cleaned_{}".format(filename)), parser)
             tree.write(os.path.join(borough_folder, "cleaned_{}".format(filename)), pretty_print=True)
+            
+        print('Done')
+        
     return 
 
 
