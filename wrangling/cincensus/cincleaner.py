@@ -115,7 +115,7 @@ def personbirthdate(value, config):
         node.remove(value)
     else:
         value.text = value.text.strip()
-        value.text = to_date(value.text, config['date'])
+        #value.text = to_date(value.text, config['date']) This is disabled because we are degrading date of birth into year of birth
     return value
 
 def expectedpersonbirthdate(value, config):
