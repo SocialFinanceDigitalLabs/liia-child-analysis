@@ -31,12 +31,24 @@ def degradefiles(cin_files, output_folder):
         # Find all birthdates
         dates = root.findall('.//PersonBirthDate', NS)
         for date in dates:
-            if len(date.text) > 4:
-                year = re.search(r'\d{4}', date.text).group(0)
+            if len(date.text) > 4: #if birthdate not degraded
+                birthdate = date.text
+                birthdate = birthdate.replace('/', '-')
+                year = re.search(r'\d{4}', birthdate).group(0)
+                # Only keep year of birth
                 date.text = year
-                birthdates_degraded += 1
+                # Create new variable school year
+                if birthdate > '{}-08-31'.format(year):
+                    school_year = year
+                else:
+                    school_year = int(year) - 1
+                parent = date.getparent()
+                etree.SubElement(parent, 'PersonSchoolYear').text = str(school_year)
+                # Count changes done
+                birthdates_degraded += 1              
+                
         
-        changes = "{} PersonBirthDate events were found, of which {} were degraded to year of birth".format(len(dates), birthdates_degraded)
+        changes = "{} PersonBirthDate events were found, of which {} were degraded to year of birth and school year".format(len(dates), birthdates_degraded)
         f.write(filename + ": " + changes + "\n")    
         print(changes)
 
