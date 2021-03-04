@@ -7,8 +7,7 @@ def degradefiles(cin_files, output_folder):
     '''
     Degrades fields in the CIN Census. We are only degrading the birthdate here. We adapt this function to degrade more fields.
     '''
-    birthdates_degraded = 0
-    
+        
     # Create borough folder
     borough = cin_files[0].split('\\')[-2]
     borough_folder = os.path.join(output_folder, borough)
@@ -27,6 +26,9 @@ def degradefiles(cin_files, output_folder):
         tree = etree.parse(file)
         root = tree.getroot()
         NS = get_namespace(root)
+        
+        # Set counter to 0
+        birthdates_degraded = 0
         
         # Find all birthdates
         dates = root.findall('.//PersonBirthDate', NS)
