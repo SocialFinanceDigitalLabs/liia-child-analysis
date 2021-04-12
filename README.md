@@ -48,6 +48,7 @@ Notebooks 10, 11 and 12 need to be run for each local authority.
 | ----------- | ----------- | ----------- |
 | S47         | ICPC        | 10          |
 | ICPC        | CPP start   | 8           | 
+
 (This is a simplified view - we also include info on age, gender, ethnicity and disability for further analysis)
 - Output: CSV with the format highlighted in the example above.
 
