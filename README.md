@@ -42,17 +42,13 @@ Notebooks 10, 11 and 12 need to be run for each local authority.
 
 #### 30-s47-journeys
 - Input: CSV from notebook 13.
-- Action: Link S47, ICPC and CPP events experienced by each child to understand their trajectory. Shape the resulting table into a format that can feed into a Sankey Chart, with "Source" and "Destination". E.g.: if 10 children went from S47 to ICPC, but only 8 of those to CPP start, it will show as:
+- Action: Link each S47 event to an ICPC and CPP events experienced by the child to understand their trajectory. To be able to feed it into a Sankey chart on PowerBI, it needs to be shaped in a particular way (see info in notebook).
+- Output: CSV with S47 information matched to ICPC and CPP where relevant.
 
-| Source      | Destination | Count       |
-| ----------- | ----------- | ----------- |
-| S47         | ICPC        | 10          |
-| ICPC        | CPP start   | 8           | 
-
-(This is a simplified view - we also include info on age, gender, ethnicity and disability for further analysis)
-- Output: CSV with the format highlighted in the example above.
-
-#### Other journeys - TBD
+#### 31-referral-journeys
+- Input: CSV from notebook 13.
+- Action: Link each Referral event to an Assessment (either S17 or S47) experienced by the child. 
+- Output: CSV with one row per Referral, with a column specifying what the outcome was (S17, S47, S17+S47 or No Further Action).
 
 
 ## Definitions
@@ -60,3 +56,6 @@ School year: refers to the school year (1st September - 31st August) the child w
 - A child born on 24/03/1996 has a school year of 1995.
 - A child born on 01/09/2000 has a school year of 2000.
 - A child born on 31/08/2009 has a school year of 2008.
+
+## Get in touch
+If you have any questions about this code, get in touch with Elaine Merrins (Elaine.Merrins@walthamforest.gov.uk) and Celine Gross (celine.gross@socialfinance.org.uk).
