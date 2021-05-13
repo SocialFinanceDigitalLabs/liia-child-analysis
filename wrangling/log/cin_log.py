@@ -76,6 +76,9 @@ def buildchild(child, tag_list, NS):
             child_data[key] = value
         for key, value in childcharacteristics.items() :
             child_data[key] = value
+        # Fill forward the referral source, to make sure all events can be linked to the original referral partner
+        if 'ReferralSource' in child_data.columns:
+            child_data['ReferralSource'].fillna(method='ffill', inplace=True)
         return(child_data)
     
     return None
