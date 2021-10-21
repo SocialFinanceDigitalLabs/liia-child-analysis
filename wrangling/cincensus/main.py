@@ -1,43 +1,110 @@
 from lxml import etree
 from datetime import datetime
-import re
+import pandas as pd
 import glob
-import os   
+import re
+import os
 
-# Main cleaner function
 
-def cleanfiles(cin_files, output_folder, config):
-       
+def main(input_folder, config):
+    '''Runs the degradation, cleaning and flat file steps'''
+    
+    # Find CIN files in the input folder
+    cin_files = glob.glob(os.path.join(input_folder, "*.xml"))
+    print("Found {} CIN files in folder {}".format(len(cin_files), input_folder))
+    
     # Go through each CIN file
+    clean_tree_list = []
     for i, file in enumerate(cin_files):
         filename = file.split('\\')[-1]
         print("File {} out of {}".format(i+1, len(cin_files)))
-
-        # Upload files and set root
-        print('Cleaning')
-        tree = etree.parse(file)
-        root = tree.getroot()
-        NS = get_namespace(root)
-        children = root.find('Children', NS)
-        for child in children:
-            child = cleanchild(child, config)
-
-        # Save output in borough folder
-        borough = file.split('\\')[-2]
-        borough_folder = os.path.join(output_folder, borough)
-        if not os.path.exists(borough_folder):
-            os.makedirs(borough_folder)
-        print('Re-writing')
-        tree.write(os.path.join(borough_folder, "cleaned_{}".format(filename)))
-
-        # Reload and rewrite xml so that we get proper identation after changing elements
-        parser = etree.XMLParser(remove_blank_text=True)
-        tree = etree.parse(os.path.join(borough_folder, "cleaned_{}".format(filename)), parser)
-        tree.write(os.path.join(borough_folder, "cleaned_{}".format(filename)), pretty_print=True)
-
-    print('Done')
         
-    return 
+        # Degrade and clean
+        print("--- Degrade file {}".format(i+1))
+        degraded_tree = degradefile(file)
+        print("--- Clean file {}".format(i+1))
+        cleaned_tree = cleanfile(degraded_tree, config)
+        
+        # Save
+        clean_tree_list.append(cleaned_tree)
+    
+    # Create CIN flatfile
+    print("--- Create CIN flatfile")
+    flatfile = build_cinrecord(clean_tree_list)
+    
+    return flatfile
+    
+    
+
+# --- Degrade step ---
+
+def degradefile(file):
+    '''
+    Degrades fields in the CIN Census. We are only degrading the birthdate here. We can adapt this function to degrade more fields.
+    '''
+
+    # Upload file and set root
+    tree = etree.parse(file)
+    root = tree.getroot()
+    NS = get_namespace(root)
+
+    # Set counter to 0
+    birthdates_degraded = 0
+
+    # Find all birthdates
+    dates = root.findall('.//PersonBirthDate', NS)
+    for date in dates:
+        if len(date.text) > 4: #if birthdate not degraded
+            birthdate = date.text
+            birthdate = birthdate.replace('/', '-')
+            year = re.search(r'\d{4}', birthdate).group(0)
+            # Only keep year of birth
+            date.text = year
+            # Create new variable school year
+            if birthdate > '{}-08-31'.format(year):
+                school_year = year
+            else:
+                school_year = int(year) - 1
+            parent = date.getparent()
+            etree.SubElement(parent, 'PersonSchoolYear').text = str(school_year)
+            # Count changes done
+            birthdates_degraded += 1              
+                
+        
+    changes = "{} PersonBirthDate events were found, of which {} were degraded to year of birth and school year".format(len(dates), birthdates_degraded)
+    print(changes)
+    
+    return tree
+
+
+# Function to identify namespace
+
+def get_namespace(root):
+    regex = r'{(.*)}.*' # pattern to pick up namespace
+    namespace = re.findall(regex, root.tag)
+    if len(namespace)>0:
+        namespace = namespace[0]
+    else:
+        namespace = None
+    NS = {None: namespace}
+    return NS
+
+
+# --- Clean step ---
+
+# Main cleaner function
+
+def cleanfile(tree, config):
+    ''' Takes tree from degradefile step'''
+    
+    # Upload files and set root
+    root = tree.getroot()
+    NS = get_namespace(root)
+    children = root.find('Children', NS)
+    for child in children:
+        child = cleanchild(child, config)
+        
+    return tree
 
 
 # Cleaner functions depending on XML tag for each file
@@ -427,7 +494,7 @@ def numberofpreviouscpp(value, config=None):
 def cppenddate(value, config):
     if value.text is None:
         node = value.getparent()
-        node.remove(value)
+        node.remove(value) 
     else:
         value.text = value.text.strip()
         value.text = to_date(value.text, config['date'])
@@ -480,14 +547,156 @@ def to_integer(string):
         # If time, add here the matching report
 
         
-# Find namespace
+# --- Flatfile step ---
 
-def get_namespace(root):
-    regex = r'{(.*)}.*' # pattern to pick up namespace
-    namespace = re.findall(regex, root.tag)
-    if len(namespace)>0:
-        namespace = namespace[0]
-    else:
-        namespace = None
-    NS = {None: namespace}
-    return NS
+# Function to pull all the files data into a unique dataframe
+# We recommend including all of the events into the cin log: it is the default list included below in build_cinrecord
+# You can edit if you only need certain events
+
+def build_cinrecord(trees, tag_list=['CINreferralDate', 'CINclosureDate', 'DateOfInitialCPC',
+                                                        'AssessmentActualStartDate', 'AssessmentAuthorisationDate', 'S47ActualStartDate', 
+                                                        'CPPstartDate', 'CPPendDate']):
+    data_list = []
+    for i, tree in enumerate(trees):
+        # Upload trees and set root
+        root = tree.getroot()
+        NS = get_namespace(root)
+        children = root.find('Children', NS)
+        # Get data
+        print('Extracting data from file {} out of {} from CIN Census'.format(i+1, len(trees)))
+        file_data = buildchildren(children, tag_list, NS)
+        data_list.append(file_data)
+    cinrecord = pd.concat(data_list, sort=False)
+
+    # Remove duplicates of LAchildID, Date and Type - we keep the one with the least null values
+    cinrecord['null_values'] = cinrecord.isnull().sum(axis=1)
+    cinrecord = cinrecord.sort_values('null_values')
+    cinrecord.drop_duplicates(subset=['LAchildID', 'Date', 'Type'], keep='first', inplace=True)
+    cinrecord.drop(labels='null_values', axis=1, inplace=True)
+
+    # Re-arrange columns
+    firstcols = ['LAchildID', 'Date', 'Type']
+    newcols = firstcols + [col for col in list(cinrecord.columns) if col not in firstcols]
+    cinrecord = cinrecord[newcols]
+
+    print('Done!')
+    
+    return cinrecord
+
+
+
+# Functions to build dataframes containing information of the child within each file
+
+def buildchildren(children, tag_list, NS):
+    df_list = []
+    for child in children:
+        data = buildchild(child, tag_list, NS)
+        df_list.append(data)
+    children_data = pd.concat(df_list, sort=False)    
+    return children_data
+
+
+def buildchild(child, tag_list, NS):
+    '''
+    Creates a dataframe storing all the events (specified in tag_list) that happened to the child
+    Pass if no ChildIdentifiers, ChildCharacteristics and CINdetails
+    '''
+    df_list = []
+    if 'ChildIdentifiers' in get_childrentags(child) and \
+    'ChildCharacteristics' in get_childrentags(child) and \
+    'CINdetails' in get_childrentags(child):
+        for group in child:
+            if group.tag.endswith('ChildIdentifiers'):
+                childidentifiers = get_ChildIdentifiers(group)
+            if group.tag.endswith('ChildCharacteristics'):
+                childcharacteristics = get_ChildCharacteristics(group, NS)
+            if group.tag.endswith('CINdetails'):
+                for tag in tag_list:
+                    event_list = group.findall('.//{}'.format(tag), NS)
+                    for event in event_list:
+                        event_group = get_group(event, NS)
+                        df = pd.DataFrame(event_group)
+                        df_list.append(df)        
+        child_data = pd.concat(df_list, sort=False)
+        for key, value in childidentifiers.items() :
+            child_data[key] = value
+        for key, value in childcharacteristics.items() :
+            child_data[key] = value
+        # Fill forward the referral source, to make sure all events can be linked to the original referral partner
+        if 'ReferralSource' in child_data.columns:
+            child_data['ReferralSource'].fillna(method='ffill', inplace=True)
+        return(child_data)
+    
+    return None
+
+
+# Functions to store the information at child level
+
+def get_ChildIdentifiers(element, NS=None):
+    childidentifiers = {}
+    for group in element:
+        column = etree.QName(group).localname
+        value = group.text
+        childidentifiers[column] = value
+    return childidentifiers
+
+
+def get_ChildCharacteristics(element, NS):
+    childcharacteristics = {}
+    for group in element:
+        if group.tag.endswith('Ethnicity'):
+            column = etree.QName(group).localname
+            value = group.text
+        elif group.tag.endswith('Disabilities'):
+            column = etree.QName(group).localname
+            value = get_list(group, 'Disability', NS)
+        childcharacteristics[column] = value
+    return childcharacteristics
+
+
+# Functions to get information at element level
+
+def get_list(element, tag, NS):
+    '''
+    Starting from the 'element', makes a list of the contents of 'tag' nieces (siblings' children sharing the same tag)
+    and returns a string
+    '''
+    value_list = []
+    values = element.getparent().findall('.//{}'.format(tag), NS)
+    for value in values:
+        value_list.append(value.text.strip())
+    value_list = (',').join(value_list)
+    value_list = value_list.replace(' ', '')
+    return value_list
+
+
+def get_group(element, NS):
+    group = {}
+    # Load our reference element
+    group['Date'] = element.text
+    group['Type'] = etree.QName(element).localname
+    # Get the other elements on the same level (siblings)
+    siblings = element.getparent().getchildren()
+    for sibling in siblings:
+        if len(sibling.getchildren())==0: # if siblings don't have children, just get their value
+            column = etree.QName(sibling).localname
+            value = sibling.text
+            group[column] = [value]
+    # If we're in the Assessment or ChildProtectionPlans modules, we need to get down one level
+    # to collect all AssessmentFactors and CPPreviewDate
+    if element.getparent().tag.endswith('Assessments'):
+        group['Factors'] = get_list(element, 'AssessmentFactors', NS)
+    if element.getparent().tag.endswith('ChildProtectionPlans'):
+        group['CPPreview'] = get_list(element, 'CPPreviewDate', NS)
+    return group
+
+
+def get_childrentags(element):
+    '''
+    Returns the list of tags of the element's children
+    '''
+    children = element.getchildren()
+    tags = []
+    for child in children:
+        tags.append(etree.QName(child).localname)
+    return tags
