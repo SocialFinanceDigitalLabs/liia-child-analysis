@@ -6,7 +6,7 @@ import re
 import os
 
 
-def main(input_folder, config):
+def main(input_folder, output_folder, config):
     '''Runs the degradation, cleaning and flat file steps'''
     
     # Find CIN files in the input folder
@@ -32,7 +32,17 @@ def main(input_folder, config):
     print("--- Create CIN flatfile")
     flatfile = build_cinrecord(clean_tree_list)
     
-    return flatfile
+    # Remove Reviews col: we've extracted the review dates in 'CPPreview' already
+    flatfile.drop("Reviews", axis=1, inplace=True)
+    
+    # Add col with LA name
+    la = file.split('\\')[-2]
+    flatfile['LA'] = la
+    
+    # Save in output folder
+    flatfile.to_csv(os.path.join(output_folder, "{}_flatcin.csv".format(la)), index=False)
+    
+    return 
     
     
 
@@ -95,7 +105,7 @@ def get_namespace(root):
 # Main cleaner function
 
 def cleanfile(tree, config):
-    ''' Takes tree from degradefile step'''
+    ''' Takes tree from degradefile step and conducts simple cleaning checks'''
     
     # Upload files and set root
     root = tree.getroot()
@@ -486,9 +496,6 @@ def numberofpreviouscpp(value, config=None):
     if value.text is None:
         node = value.getparent()
         node.remove(value)
-    else:
-        value.text = value.text.strip()
-        value.text = to_integer(value.text)
     return value
 
 def cppenddate(value, config):
@@ -539,12 +546,6 @@ def to_date(string, dateformat):
     return string
     # If time, add here the matching report
     
-def to_integer(string):
-    try:
-        int(string) # Check this is possible
-    except:
-        string = 'Not in proper format: {}'.format(string)
-        # If time, add here the matching report
 
         
 # --- Flatfile step ---
