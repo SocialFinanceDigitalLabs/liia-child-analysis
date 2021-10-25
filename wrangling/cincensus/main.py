@@ -6,41 +6,59 @@ import re
 import os
 
 
-def main(input_folder, output_folder, config):
-    '''Runs the degradation, cleaning and flat file steps'''
+def main(input_folder, output_folder, config, process_missing_only=True):
+    '''Runs the degradation, cleaning and flat file steps
+    - Identifies all LA CIN files in cin_folder
+    - Option to only process the files that haven't been converted into a flatfile
+    - Outputs the flatfiles into the flatfiles folder'''
     
-    # Find CIN files in the input folder
-    cin_files = glob.glob(os.path.join(input_folder, "*.xml"))
-    print("Found {} CIN files in folder {}".format(len(cin_files), input_folder))
+    # Identify LAs
+    # All
+    all_las = os.listdir(input_folder)
+    # Already processed
+    processed_las = [x.split('_')[0] for x in os.listdir(output_folder)]
     
-    # Go through each CIN file
-    clean_tree_list = []
-    for i, file in enumerate(cin_files):
-        filename = file.split('\\')[-1]
-        print("File {} out of {}".format(i+1, len(cin_files)))
-        
-        # Degrade and clean
-        print("--- Degrade file {}".format(i+1))
-        degraded_tree = degradefile(file)
-        print("--- Clean file {}".format(i+1))
-        cleaned_tree = cleanfile(degraded_tree, config)
-        
-        # Save
-        clean_tree_list.append(cleaned_tree)
+    # Process all or only missing data
+    if process_missing_only:
+        las_to_process = [la for la in all_las if la not in processed_las]
+    else:
+        las_to_process = all_las
     
-    # Create CIN flatfile
-    print("--- Create CIN flatfile")
-    flatfile = build_cinrecord(clean_tree_list)
+    # Go through the process for each LA to process
+    print("Processing {} LAs: {}".format(len(las_to_process), las_to_process))
+    for la in las_to_process:
     
-    # Remove Reviews col: we've extracted the review dates in 'CPPreview' already
-    flatfile.drop("Reviews", axis=1, inplace=True)
+        # Find CIN files in the LA folder
+        cin_files = glob.glob(os.path.join(input_folder, la, "*.xml"))
+        print("{} --- Found {} CIN files".format(la, len(cin_files)))
     
-    # Add col with LA name
-    la = file.split('\\')[-2]
-    flatfile['LA'] = la
-    
-    # Save in output folder
-    flatfile.to_csv(os.path.join(output_folder, "{}_flatcin.csv".format(la)), index=False)
+        # Go through each CIN file
+        clean_tree_list = []
+        for i, file in enumerate(cin_files):
+            print("File {} out of {}".format(i+1, len(cin_files)))
+
+            # Degrade and clean
+            print("--- Degrade file {}".format(i+1))
+            degraded_tree = degradefile(file)
+            print("--- Clean file {}".format(i+1))
+            cleaned_tree = cleanfile(degraded_tree, config)
+
+            # Save
+            clean_tree_list.append(cleaned_tree)
+
+        # Create LA CIN flatfile
+        print("--- Create CIN flatfile")
+        flatfile = build_cinrecord(clean_tree_list)
+
+        # Remove Reviews col: we've extracted the review dates in 'CPPreview' already
+        if "Reviews" in flatfile.columns:
+            flatfile.drop("Reviews", axis=1, inplace=True)
+
+        # Add col with LA name
+        flatfile['LA'] = la
+
+        # Save in output folder
+        flatfile.to_csv(os.path.join(output_folder, "{}_flatcin.csv".format(la)), index=False)
     
     return 
     
